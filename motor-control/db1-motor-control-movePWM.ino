@@ -4,7 +4,7 @@
   Tests movePWM function
   Development for db1-motor-control
 
-  DroneBot Workshop 2019
+  DroneBot Workshop 2020
   https://dronebotworkshop.com
 */
 

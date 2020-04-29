@@ -3,15 +3,18 @@
   db1-motor-control-test-01.ino
   Controls single DC Gearmotor with Rotary Encoder
   Motor driven with Cytron MD10C Motor Driver
-  External control via I2C
-  Emebrgency Stop interrupts
   
-  Version 0.4
-  Updated 2020-04-27
+  Basic Functionality Test
+  Version 0.41
+  Updated 2020-04-29
 
   DroneBot Workshop 2020
   https://dronebotworkshop.com
 */
+
+
+
+
 
 // Robot-Specific Options
 // Change as required
@@ -35,8 +38,8 @@ int pwmDiv0 = 1;
 int pwmDiv1 = 8;
 
 
-// Arduino Pin number definitions
-// Nano or ATMega328 design
+// Pin number definitions
+// Arduino Nano or ATMega328 design
 
 // Rotary Encoder output to Arduino Interrupt pin 2 (ATMega328 pin 4) - INT 0
 #define ENC_IN 2
@@ -107,14 +110,68 @@ int motorStatus = 0;
 int i2cAddr;
 
 
+/*
+	Function Status
 
-// motorRPM Function
-// Reads encoder, returns speed in RPM
+	* CMtoSteps - Convert from centimeters to steps - DONE
+	* clearStop - Clears Emergency Stop condition - FUNCTIONAL
+	* getStatus - Returns current motor and controller status - NOT CODED
+	* motorAccel - Accelerates motor between two speeds - DONE
+	* motorDecel - Decelerates motor between two speeds - DONE
+	* motorRPM - Reads encoder, returns speed in RPM - NOT CODED
+	* moveDistance - Move robot platform a specified disstance in CM - NOT CODED
+	* movePWM - Moves motor at speed specified by PWM value - DONE
+	* moveRPM - Moves motor at speed specified by RPM value - NOT CODED
+	* readRPM - Reads motor speed in RPM - NOT CODED
+	* setI2C - Select I2C address based upon state of two I2C Address Pins - DONE
+	* setPWM - Select motor PWM Frequency based upon state of PWM FREQ Pin - DONE
+	* setPwmFrequency - Sets PWM frequency using a divisor - DONE
+	* stopMotor - Stops motor - DONE
 
-int motorRPM(int encpulse)
+*/
+
+
+// CMtoSteps Function
+// Convert from centimeters to steps
+
+int CMtoSteps(float cm) {
+
+  int result;  // Final calculation result
+  float circumference = (wheel_diameter * 3.14) / 10; // Calculate wheel circumference in cm
+  float cm_step = circumference / count_rev;  // CM per Step
+
+  float f_result = cm / cm_step;  // Calculate result as a float
+  result = (int) f_result; // Convert to an integer (note this is NOT rounded)
+
+  return result;  // End and return result
+
+}
+
+
+// clearStop Function (I2C Command)
+// Clears Emergency Stop condition
+
+void clearStop()
+{
+  // Reset Motor Speed variable
+  motorPwm = 0;
+
+  // Write values to Motor Driver
+  analogWrite(MD10C_PWM, motorPwm);
+
+  // Set Status to Ready
+  motorStatus = 1;
+}
+
+
+// getStatus Function (I2C Command)
+// Returns current motor and controller status
+
+void getStatus()
 {
 
 }
+
 
 // motorAccel Function
 // Accelerates motor between two speeds
@@ -163,6 +220,49 @@ void motorDecel(int mspeedlow, int mspeedhigh, int per = 1000) {
       analogWrite(MD10C_PWM, i);
     }
   }
+}
+
+
+// motorRPM Function
+// Reads encoder, returns speed in RPM
+
+int motorRPM(int encpulse)
+{
+
+}
+
+
+// moveDistance Function (I2C Command)
+// Move robot platform a specified disstance in CM
+// Required Distance and Direction parameters
+// Optional PWM Speed parameter - 0 to 255
+// Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
+// Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
+
+void moveDistance(int dis, int dr, int spp = 255, int acl = 0, int dcl = 0)
+{
+  
+    // Set Status to Busy
+    motorStatus = 0;
+
+    // Keep Direction between 0 and 1
+    if (dr > 1) dr = 1;
+    if (dr < 0) dr = 0;
+
+    // Keep acceleration between 0 and 1 minute
+    if (acl > 60000) acl = 60000;
+    if (acl < 0) acl = 0;
+
+    // Keep deceleration between 0 and 1 minute
+    if (dcl > 60000) dcl = 60000;
+    if (dcl < 0) dcl = 0;
+
+
+
+
+    // Set Status to Ready
+    motorStatus = 1;
+
 }
 
 
@@ -249,7 +349,6 @@ void movePWM(int spp, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 }
 
 
-
 // moveRPM Function (I2C Command)
 // Moves motor at speed specified by RPM value
 // Required Speed and Direction parameters
@@ -287,43 +386,105 @@ void moveRPM(int spr, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 }
 
 
+// readRPM Function (I2C Command)
+// Reads motor speed in RPM
 
-
-// moveDistance Function (I2C Command)
-// Move robot platform a specified disstance in CM
-// Required Distance and Direction parameters
-// Optional PWM Speed parameter - 0 to 255
-// Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
-// Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
-
-void moveDistance(int dis, int dr, int spp = 255, int acl = 0, int dcl = 0)
+void readRPM()
 {
-  while (motorStatus < 2) {
 
-    // Set Status to Busy
-    motorStatus = 0;
-
-    // Keep Direction between 0 and 1
-    if (dr > 1) dr = 1;
-    if (dr < 0) dr = 0;
-
-    // Keep acceleration between 0 and 1 minute
-    if (acl > 60000) acl = 60000;
-    if (acl < 0) acl = 0;
-
-    // Keep deceleration between 0 and 1 minute
-    if (dcl > 60000) dcl = 60000;
-    if (dcl < 0) dcl = 0;
-
-
-
-
-    // Set Status to Ready
-    motorStatus = 1;
-  }
 }
 
 
+// setI2C Function
+// Select I2C address based upon state of two I2C Address Pins
+// Input four I2C Addresses
+// Returns selected I2C Address
+
+int setI2C(int addr0, int addr1, int addr2, int addr3) {
+
+  int i2cpinstate0;  // State of I2C address select pin 0
+  int i2cpinstate1;  // State of I2C address select pin 1
+  int i2caddress;  // Final I2C address
+
+  i2cpinstate0 = digitalRead(I2C_ADDR0); //Read I2C address select pin 0
+  i2cpinstate1 = digitalRead(I2C_ADDR1); //Read I2C address select pin 1
+
+  if (i2cpinstate0 == 0 & i2cpinstate1 == 0 ) {
+    i2caddress = addr0;
+  } else if (i2cpinstate0 == 1 & i2cpinstate1 == 0 ) {
+    i2caddress = addr1;
+  } else if (i2cpinstate0 == 0 & i2cpinstate1 == 1 ) {
+    i2caddress = addr2;
+  } else if (i2cpinstate0 == 1 & i2cpinstate1 == 1 ) {
+    i2caddress = addr3;
+  } else {
+    i2caddress = addr0;
+  }
+
+  return i2caddress; //End and return I2C address
+}
+
+
+// setPWM Function
+// Select motor PWM Frequency based upon state of PWM FREQ Pin
+// Input two PWM Frequency Divisors
+// Calls setPwmFrequency
+// Sets frequency and returns selected PWM Divisor
+
+int setPWM(int div0, int div1) {
+
+	int pwmpinstate;  // State of PWM Frequency select pin
+	int pwmdiv;			// Final divisor for PWM frequency
+	
+	pwmpinstate = digitalRead(PWM_FREQ); //Read I2C address select pin 0
+	
+	if (pwmpinstate == 0  ) {
+		pwmdiv = div0;
+	} else {
+	  pwmdiv = div1;
+	} 
+	
+	// Set the PWM frequency based upon the selected divisor
+	setPwmFrequency(MD10C_PWM, pwmdiv);
+	
+	return pwmdiv; //End and return selected divisor
+	 
+}
+
+
+// setPwmFrequency Function
+// Sets PWM frequency using a divisor
+
+void setPwmFrequency(int pin, int divisor) {
+  byte mode;
+  if (pin == 5 || pin == 6 || pin == 9 || pin == 10) {
+    switch (divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 64: mode = 0x03; break;
+      case 256: mode = 0x04; break;
+      case 1024: mode = 0x05; break;
+      default: return;
+    }
+    if (pin == 5 || pin == 6) {
+      TCCR0B = TCCR0B & 0b11111000 | mode;
+    } else {
+      TCCR1B = TCCR1B & 0b11111000 | mode;
+    }
+  } else if (pin == 3 || pin == 11) {
+    switch (divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 32: mode = 0x03; break;
+      case 64: mode = 0x04; break;
+      case 128: mode = 0x05; break;
+      case 256: mode = 0x06; break;
+      case 1024: mode = 0x07; break;
+      default: return;
+    }
+    TCCR2B = TCCR2B & 0b11111000 | mode;
+  }
+}
 
 
 // stopMotor Function (I2C Command)
@@ -363,141 +524,6 @@ void stopMotor(int dcl = 0)
 
 
 
-// readRPM Function (I2C Command)
-// Reads motor speed in RPM
-
-void readRPM()
-{
-
-}
-
-
-// clearStop Function (I2C Command)
-// Clears Emergency Stop condition
-
-void clearStop()
-{
-  // Reset Motor Speed variable
-  motorPwm = 0;
-
-  // Write values to Motor Driver
-  analogWrite(MD10C_PWM, motorPwm);
-
-  // Set Status to Ready
-  motorStatus = 1;
-}
-
-
-// getStatus Function (I2C Command)
-// Returns current motor and controller status
-
-
-// setPwmFrequency Function
-// Sets PWM to a higher frequency for improved performance
-
-void setPwmFrequency(int pin, int divisor) {
-  byte mode;
-  if (pin == 5 || pin == 6 || pin == 9 || pin == 10) {
-    switch (divisor) {
-      case 1: mode = 0x01; break;
-      case 8: mode = 0x02; break;
-      case 64: mode = 0x03; break;
-      case 256: mode = 0x04; break;
-      case 1024: mode = 0x05; break;
-      default: return;
-    }
-    if (pin == 5 || pin == 6) {
-      TCCR0B = TCCR0B & 0b11111000 | mode;
-    } else {
-      TCCR1B = TCCR1B & 0b11111000 | mode;
-    }
-  } else if (pin == 3 || pin == 11) {
-    switch (divisor) {
-      case 1: mode = 0x01; break;
-      case 8: mode = 0x02; break;
-      case 32: mode = 0x03; break;
-      case 64: mode = 0x04; break;
-      case 128: mode = 0x05; break;
-      case 256: mode = 0x06; break;
-      case 1024: mode = 0x07; break;
-      default: return;
-    }
-    TCCR2B = TCCR2B & 0b11111000 | mode;
-  }
-}
-
-// CMtoSteps Function
-// Convert from centimeters to steps
-
-int CMtoSteps(float cm) {
-
-  int result;  // Final calculation result
-  float circumference = (wheel_diameter * 3.14) / 10; // Calculate wheel circumference in cm
-  float cm_step = circumference / count_rev;  // CM per Step
-
-  float f_result = cm / cm_step;  // Calculate result as a float
-  result = (int) f_result; // Convert to an integer (note this is NOT rounded)
-
-  return result;  // End and return result
-
-}
-
-// setI2C Function
-// Select I2C address based upon state of two I2C Address Pins
-// Input four I2C Addresses
-// Returns selected I2C Address
-
-int setI2C(int addr0, int addr1, int addr2, int addr3) {
-
-  int i2cpinstate0;  // State of I2C address select pin 0
-  int i2cpinstate1;  // State of I2C address select pin 1
-  int i2caddress;  // Final I2C address
-
-  i2cpinstate0 = digitalRead(I2C_ADDR0); //Read I2C address select pin 0
-  i2cpinstate1 = digitalRead(I2C_ADDR1); //Read I2C address select pin 1
-
-  if (i2cpinstate0 == 0 & i2cpinstate1 == 0 ) {
-    i2caddress = addr0;
-  } else if (i2cpinstate0 == 1 & i2cpinstate1 == 0 ) {
-    i2caddress = addr1;
-  } else if (i2cpinstate0 == 0 & i2cpinstate1 == 1 ) {
-    i2caddress = addr2;
-  } else if (i2cpinstate0 == 1 & i2cpinstate1 == 1 ) {
-    i2caddress = addr3;
-  } else {
-    i2caddress = addr0;
-  }
-
-  return i2caddress; //End and return I2C address
-}
-
-
-// setPWM Function
-// Select motor PWM Frequency based upon state of PWM FREQ Pin
-// Input two PWM Frequency Divisors
-// Calls setPwmFrequency
-
-int setPWM(int div0, int div1) {
-
-	int pwmpinstate;  // State of PWM Frequency select pin
-	int pwmdiv;			// Final divisor for PWM frequency
-	
-	pwmpinstate = digitalRead(PWM_FREQ); //Read I2C address select pin 0
-	
-	if (pwmpinstate == 0  ) {
-		pwmdiv = div0;
-	} else {
-	  pwmdiv = div1;
-	} 
-	
-	// Set the PWM frequency based upon the selected divisor
-	setPwmFrequency(MD10C_PWM, pwmdiv);
-	
-	return pwmdiv; //End and return selected divisor
-	 
-}
-
-
 
 void setup() {
 
@@ -520,7 +546,6 @@ void setup() {
   pinMode(EM_STOP_3, INPUT_PULLUP);
   pinMode(EM_STOP_4, INPUT_PULLUP);
   pinMode(EM_STOP_5, INPUT_PULLUP);
-
 
   // Set I2C Address Select pins as Inputs
   pinMode(I2C_ADDR0, INPUT);

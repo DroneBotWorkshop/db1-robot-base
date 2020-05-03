@@ -30,10 +30,10 @@ float count_rev = 374.32;
 float wheel_diameter = 101.60;
 
 // I2C Address List
-int i2cAddr0 = 9;		// I2C Address 0
-int i2cAddr1 = 10;		// I2C Address 1
-int i2cAddr2 = 11;		// I2C Address 2
-int i2cAddr3 = 12;		// I2C Address 3
+int i2cAddr0 = 9;    // I2C Address 0
+int i2cAddr1 = 10;    // I2C Address 1
+int i2cAddr2 = 11;    // I2C Address 2
+int i2cAddr3 = 12;    // I2C Address 3
 
 // PWM Frequency Divisors
 int pwmDiv0 = 1;
@@ -72,12 +72,12 @@ int pwmDiv1 = 8;
 #define LED_EM_STOP 10
 
 // Emergency Stop Inputs (Analog Inputs used as Digital Inputs)
-#define EM_STOP_0 8 	// Arduino pin 8 (ATMega328 pin 14)
-#define EM_STOP_1 9 	// Arduino pin 9 (ATMega328 pin 15)		
-#define EM_STOP_2 A0 	// Arduino pin A0 (ATMega328 pin 23)
-#define EM_STOP_3 A1 	// Arduino pin A1 (ATMega328 pin 24)
-#define EM_STOP_4 A2 	// Arduino pin A2 (ATMega328 pin 25)
-#define EM_STOP_5 A3 	// Arduino pin A3 (ATMega328 pin 26)
+#define EM_STOP_0 8   // Arduino pin 8 (ATMega328 pin 14)
+#define EM_STOP_1 9   // Arduino pin 9 (ATMega328 pin 15)   
+#define EM_STOP_2 A0  // Arduino pin A0 (ATMega328 pin 23)
+#define EM_STOP_3 A1  // Arduino pin A1 (ATMega328 pin 24)
+#define EM_STOP_4 A2  // Arduino pin A2 (ATMega328 pin 25)
+#define EM_STOP_5 A3  // Arduino pin A3 (ATMega328 pin 26)
 
 
 // Operational Variables
@@ -98,38 +98,41 @@ int rpm = 0;
 // Variable for PWM motor speed output
 volatile int motorPwm = 0;
 
+enum direction {REVERSE = 0, FORWARD = 1};
 // Variable for motor direction
-int motorDir = 1;
+int motorDir = FORWARD;
 
+//Motor status's
+enum motorStatus {msBUSY, msREADY, msSTOP = 8, msESTOP = 9};
 // Variable for Motor Status
 // 0 = Busy
 // 1 = Ready
 // 8 = Stop
 // 9 = Emergency Stop
-volatile int motorStatus = 0;
+volatile int motorStatus = msREADY;
 
 // Variable for I2C final address
 int i2cAddr;
 
 
 /*
-	Function Status
+  Function Status
 
-	 CMtoSteps - Convert from centimeters to steps - DONE
-	 clearStop - Clears Emergency Stop condition - FUNCTIONAL
-	 getStatus - Returns current motor and controller status - NOT CODED
-	 motorAccel - Accelerates motor between two speeds - DONE
-	 motorDecel - Decelerates motor between two speeds - DONE
-	 motorMove - Moves motor at desired speed - DONE
-	 motorRPM - Reads encoder, returns speed in RPM - NOT CODED
-	 moveDistance - Move robot platform a specified distance in CM - NOT CODED
-	 movePWM - Moves motor at speed specified by PWM value - DONE
-	 moveRPM - Moves motor at speed specified by RPM value - NOT CODED
-	 readRPM - Reads motor speed in RPM - NOT CODED
-	 setI2C - Select I2C address based upon state of two I2C Address Pins - DONE
-	 setPWM - Select motor PWM Frequency based upon state of PWM FREQ Pin - DONE
-	 setPwmFrequency - Sets PWM frequency using a divisor - DONE
-	 stopMotor - Stops motor - DONE
+   CMtoSteps - Convert from centimeters to steps - DONE
+   clearStop - Clears Emergency Stop condition - FUNCTIONAL
+   getStatus - Returns current motor and controller status - NOT CODED
+   motorAccel - Accelerates motor between two speeds - DONE
+   motorDecel - Decelerates motor between two speeds - DONE
+   motorMove - Moves motor at desired speed - DONE
+   motorRPM - Reads encoder, returns speed in RPM - NOT CODED
+   moveDistance - Move robot platform a specified distance in CM - NOT CODED
+   movePWM - Moves motor at speed specified by PWM value - DONE
+   moveRPM - Moves motor at speed specified by RPM value - NOT CODED
+   readRPM - Reads motor speed in RPM - NOT CODED
+   setI2C - Select I2C address based upon state of two I2C Address Pins - DONE
+   setPWM - Select motor PWM Frequency based upon state of PWM FREQ Pin - DONE
+   setPwmFrequency - Sets PWM frequency using a divisor - DONE
+   stopMotor - Stops motor - DONE
 
 */
 
@@ -139,7 +142,7 @@ int i2cAddr;
 // Interrupt 0
 
 void isr_rotencode() {
-
+  encoderValue++;
 }
 
 
@@ -154,7 +157,7 @@ void isr_emstop() {
   digitalWrite(MD10C_PWM, 0);
 
   // Set Status
-  motorStatus = 9;
+  motorStatus = msESTOP;
 
 }
 
@@ -172,7 +175,6 @@ int CMtoSteps(float cm) {
   result = (int) f_result; // Convert to an integer (note this is NOT rounded)
 
   return result;  // End and return result
-
 }
 
 
@@ -188,7 +190,7 @@ void clearStop()
   analogWrite(MD10C_PWM, motorPwm);
 
   // Set Status to Ready
-  motorStatus = 1;
+  motorStatus = msREADY;
 }
 
 
@@ -197,7 +199,7 @@ void clearStop()
 
 void getStatus()
 {
-
+  //TODO
 }
 
 
@@ -206,21 +208,25 @@ void getStatus()
 // Required Low Speed and High Speed
 // Optional Period of acceleration
 
-void motorAccel(int mspeedlow, int mspeedhigh, int per = 1000) {
+void motorAccel(int mspeedlow, int mspeedhigh, int per = 1000)
+{
 
   // Determine the increment
   long incr;
-  if (mspeedhigh > mspeedlow) {
-    incr = per / (mspeedhigh - mspeedlow);
-  } else {
-    incr = 1;
-  }
+  if (motorStatus != msESTOP) // If ESTOP is set skip acceleration.
+  {
+    if (mspeedhigh > mspeedlow)
+    {
+      incr = per / (mspeedhigh - mspeedlow);
+    } else {
+      incr = 1;
+    }
 
-  for (int i = mspeedlow; i <= mspeedhigh; i++) {
-    currentMillis = millis();
-    while (millis() < currentMillis + incr) {
-      // Drive motor for period in ms
-      motorMove(i);
+    for (int i = mspeedlow; i <= mspeedhigh; i++) //Probably should increment PWM by more then 1 each time.
+    {
+      currentMillis = millis();
+      motorMove(i);  // motorMove will check for ESTOP and not move the motor if set.
+      while (millis() < currentMillis + incr) {} //Pause before next increment.
     }
   }
 }
@@ -231,21 +237,25 @@ void motorAccel(int mspeedlow, int mspeedhigh, int per = 1000) {
 // Required Low Speed and High Speed
 // Optional Period of deceleration
 
-void motorDecel(int mspeedlow, int mspeedhigh, int per = 1000) {
-
+void motorDecel(int mspeedlow, int mspeedhigh, int per = 1000)
+{
   // Determine the increment
   long incr;
-  if (mspeedhigh > mspeedlow) {
-    incr = per / (mspeedhigh - mspeedlow);
-  } else {
-    incr = 1;
-  }
+  if (motorStatus != msESTOP) // If ESTOP is set skip acceleration.
+  {
+    if (mspeedhigh > mspeedlow)
+    {
+      incr = per / (mspeedhigh - mspeedlow);
+    } else
+    {
+      incr = 1;
+    }
 
-  for (int i = mspeedhigh; i >= mspeedlow; i--) {
-    currentMillis = millis();
-    while (millis() < currentMillis + incr) {
-      // Drive motor for period in ms
-      motorMove(i);
+    for (int i = mspeedhigh; i >= mspeedlow; i--) //Probably should decrement PWM by more then 1 each time.
+    {
+      motorMove(i); // motorMove will check for ESTOP and not move the motor if set.
+      currentMillis = millis();
+      while (millis() < currentMillis + incr) {} //Delay before next increment.
     }
   }
 }
@@ -255,23 +265,36 @@ void motorDecel(int mspeedlow, int mspeedhigh, int per = 1000) {
 // Moves motor at desired speed
 // Replaces analogWrite function by checking status
 
-void motorMove(int mtrspeed) {
+void motorMove(int mtrspeed)
+{
   // Check motor status
-  if (motorStatus == 9) {
-    digitalWrite(MD10C_PWM, 0);
-  } else {
+  if (motorStatus != msESTOP) // If ESTOP set skip the move.
+  {
     analogWrite(MD10C_PWM, mtrspeed);
+    motorPwm = mtrspeed;
+
+    if (motorStatus == msESTOP) //Check if ESTOP occurred between last time we testedd and the analogWrite.
+    {
+      analogWrite(MD10C_PWM, 0);
+      motorPwm = 0;
+    }
   }
-
 }
-
 
 // motorRPM Function
 // Reads encoder, returns speed in RPM
-
-int motorRPM(int encpulse)
+int motorRPM() //TODO Maybe this should be a float?
 {
+  long int originalMillis;
+  long int startEncoderValue, endEncoderValue;
 
+  startEncoderValue = encoderValue;
+  //Test for 500 millis
+  originalMillis = millis();
+  while (millis() - originalMillis < 500) {}
+  endEncoderValue = encoderValue;
+
+  return (((endEncoderValue - startEncoderValue) / count_rev) * 120);
 }
 
 
@@ -284,34 +307,21 @@ int motorRPM(int encpulse)
 
 void moveDistance(int dis, int dr, int spp = 255, int acl = 0, int dcl = 0)
 {
-
   // Set Status to Busy
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 0;
-  }
+  if (motorStatus != msESTOP) //IF ESTOP is set skip this.
+  {
+    motorStatus = msBUSY;
 
-  // Keep Direction between 0 and 1
-  if (dr > 1) dr = 1;
-  if (dr < 0) dr = 0;
+    constrain(dr, REVERSE, FORWARD);
+    constrain(acl, 0, 6000); // Limit acceleration between 0 and 1 minute.
+    constrain(dcl, 0, 6000); // Limit decceleration between 0 and 1 minute.
 
-  // Keep acceleration between 0 and 1 minute
-  if (acl > 60000) acl = 60000;
-  if (acl < 0) acl = 0;
-
-  // Keep deceleration between 0 and 1 minute
-  if (dcl > 60000) dcl = 60000;
-  if (dcl < 0) dcl = 0;
-
-
-
-
-  // Set Status to Ready
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 1;
+    // Set Status to Ready
+    if (motorStatus != msESTOP)
+    {
+      motorStatus = msREADY;
+    }
+    //TODO Rest of code to do moveDistance
   }
 }
 
@@ -325,87 +335,71 @@ void moveDistance(int dis, int dr, int spp = 255, int acl = 0, int dcl = 0)
 
 void movePWM(int spp, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 {
+  if (motorStatus != msESTOP)
+  {
+    motorStatus = msBUSY;
 
-  // Set Status to Busy
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 0;
-  }
+    constrain(spp, 0, 255);
+    constrain(dr, REVERSE, FORWARD);
+    constrain(tm, 0, 6000);
+    constrain(acl, 0, 6000);
+    constrain(dcl, 0, 6000);
 
-  // Keep PWM speed between 0 and 255
-  if (spp > 255) spp = 255;
-  if (spp < 0) spp = 0;
+    // Set Motor Direction
+    digitalWrite(MD10C_DIR, dr);
 
-  // Keep Direction between 0 and 1
-  if (dr > 1) dr = 1;
-  if (dr < 0) dr = 0;
-
-  // Keep run time between 0 and 1 minute
-  if (tm > 60000) tm = 60000;
-  if (tm < 0) tm = 0;
-
-  // Keep acceleration between 0 and 1 minute
-  if (acl > 60000) acl = 60000;
-  if (acl < 0) acl = 0;
-
-  // Keep deceleration between 0 and 1 minute
-  if (dcl > 60000) dcl = 60000;
-  if (dcl < 0) dcl = 0;
-
-  // Set Motor Direction
-  digitalWrite(MD10C_DIR, dr);
-
-  // Check if there is Acceleration specified
-  // If Yes then call accelerate function
-  if (acl > 0) {
-    motorAccel(0, spp, acl);
-    // Update the motor speed variable
-    motorPwm = spp;
-  }
-
-  // Check if Run Time specified
-  // If Yes run for desired time and check for deceletation
-  // If no then run forever
-  if (tm > 0) {
-    // Run for specified period
-    currentMillis = millis();
-    motorMove(spp);
-    // Update the motor speed variable
-    motorPwm = spp;
-    while (millis() < currentMillis + tm) {
-      //wait for time in ms
+    // Check if there is Acceleration specified
+    // If Yes then call accelerate function
+    if (acl > 0)
+    {
+      motorAccel(0, spp, acl); // motorMove will check for ESTOP
+      // Update the motor speed variable
+      //motorPwm = spp; // This is set in motorMove
     }
 
-    // Check for Deceleration
-    if (dcl > 0) {
-      // Call decelerate function
-      motorDecel(0, spp, dcl);
+    // Check if Run Time specified
+    // If Yes run for desired time and check for deceletation
+    // If no then run forever
+    if (tm > 0)
+    {
+      // Run for specified period
+      currentMillis = millis();
+      motorMove(spp);
       // Update the motor speed variable
-      motorPwm = 0;
-    } else {
-      // Stop the motor
-      analogWrite(MD10C_PWM, 0);
-      // Update the motor speed variable
-      motorPwm = 0;
+      //motorPwm = spp; // This is set in motorMove
+
+      while (millis() < currentMillis + tm)
+      { //Run motor for time in ms
+      }
+
+      // Check for Deceleration
+      if (dcl > 0)
+      {
+        // Call decelerate function
+        motorDecel(0, motorPwm, dcl);
+
+      } else // Stop the motor
+      {
+        motorMove(0);
+      }
+
+    } else
+    {
+      // Write speed to Motor Driver
+      // TODO Should have a motor status that indicates it is moving
+      motorMove(spp);
     }
 
-  } else {
-
-    // Write speed to Motor Driver
-    motorMove(spp);
-
+    if (motorStatus != msESTOP)
+      motorStatus = msREADY;
   }
-
-  // Set Status to Ready
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 1;
-  }
-
 }
 
+
+int convertRpmToPwm(int rpm)
+{
+  //TODO --code to convert the RPM to PWM
+}
 
 // moveRPM Function (I2C Command)
 // Moves motor at speed specified by RPM value
@@ -414,35 +408,27 @@ void movePWM(int spp, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 // Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
 // Optional Acceleration parameter - 1 ms to 60 seconds(0 = none)
 
-void moveRPM(int spr, int dr, int tm = 60000, int acl = 0, int dcl = 0)
+void moveRPM(int rpm, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 {
+  int pwm;
 
   // Set Status to Busy
-  //motorStatus = 0;
+  //motorStatus = msBUSY;
 
-  // Keep Direction between 0 and 1
-  if (dr > 1) dr = 1;
-  if (dr < 0) dr = 0;
+  constrain(dr, REVERSE, FORWARD); // Keep Direction between 0 and 1
+  constrain(tm, 0, 6000); // Keep run time between 0 and 1 minute
+  constrain(acl, 0, 6000); // Keep acceleration between 0 and 1 minute
+  constrain(dcl, 0, 6000); // Keep deceleration between 0 and 1 minute
 
-  // Keep run time between 0 and 1 minute
-  if (tm > 60000) tm = 60000;
-  if (tm < 0) tm = 0;
+  // Convert RPM to PWM
+  pwm = convertRpmToPwm(rpm);
 
-  // Keep acceleration between 0 and 1 minute
-  if (acl > 60000) acl = 60000;
-  if (acl < 0) acl = 0;
-
-  // Keep deceleration between 0 and 1 minute
-  if (dcl > 60000) dcl = 60000;
-  if (dcl < 0) dcl = 0;
-
-
+  movePWM(pwm, dr, tm, acl, dcl);
 
   // Set Status to Ready
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 1;
+  if (motorStatus != msESTOP)
+  {
+    motorStatus = msREADY;
   }
 
 }
@@ -453,7 +439,9 @@ void moveRPM(int spr, int dr, int tm = 60000, int acl = 0, int dcl = 0)
 
 void readRPM()
 {
-
+  int currentRPM;
+  currentRPM = motorRPM();
+  // TODO Need to send this out of I2C
 }
 
 
@@ -496,7 +484,7 @@ int setI2C(int addr0, int addr1, int addr2, int addr3) {
 int setPWM(int div0, int div1) {
 
   int pwmpinstate;  // State of PWM Frequency select pin
-  int pwmdiv;			// Final divisor for PWM frequency
+  int pwmdiv;     // Final divisor for PWM frequency
 
   pwmpinstate = digitalRead(PWM_FREQ); //Read I2C address select pin 0
 
@@ -557,39 +545,26 @@ void stopMotor(int dcl = 0)
 {
 
   // Set Status to Busy
-  //motorStatus = 0;
-
-  // Get current motor PWM speed
-  int spp = motorPwm;
+  motorStatus = msBUSY;
 
   // Keep deceleration between 0 and 1 minute
-  if (dcl > 60000) dcl = 60000;
-  if (dcl < 0) dcl = 0;
-
+  constrain(dcl, 0, 6000);
+  
   // Check for deceleration
-  if (dcl > 0) {
-    motorDecel(0, spp, dcl);
+  if (dcl > 0) 
+  {
+    motorDecel(0, motorPwm, dcl);
+  } else // No deceleration, just stop
+  {
+    motorMove(0);
   }
-
-
-  // Write values to motor driver to stop motor
-  digitalWrite(MD10C_PWM, 0);
-
-  // Reset Motor Speed variable
-  motorPwm = 0;
-
 
   // Set Status to Stop
-  if (motorStatus == 9) {
-    motorStatus = 9;
-  } else {
-    motorStatus = 8;
+  if (motorStatus != msESTOP) 
+  {
+    motorStatus = msSTOP;
   }
 }
-
-
-
-
 
 void setup() {
 
